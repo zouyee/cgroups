@@ -479,6 +479,73 @@ func getHugePageSizeFromFilenames(fileNames []string) ([]string, error) {
 	return pageSizes, warn
 }
 
+func getStatPSIFromFile(path string) *stats.PSIStats {
+	f, err := os.Open(path)
+	if err != nil {
+		return &stats.PSIStats{}
+	}
+	defer f.Close()
+
+	var psistats stats.PSIStats
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		parts := strings.Fields(sc.Text())
+		var pv *stats.PSIData
+		switch parts[0] {
+		case "some":
+			psistats.Some = pv
+			pv = psistats.Some
+		case "full":
+			psistats.Full = pv
+			pv = psistats.Full
+		}
+		if pv != nil {
+			pv, err = parsePSIData(parts[1:])
+			if err != nil {
+				logrus.Errorf("unable to parse psi data: %v", err)
+				return &stats.PSIStats{}
+			}
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return &stats.PSIStats{}
+	}
+	return &psistats
+}
+
+func parsePSIData(psi []string) (*stats.PSIData, error) {
+	data := &stats.PSIData{}
+	for _, f := range psi {
+		kv := strings.SplitN(f, "=", 2)
+		if len(kv) != 2 {
+			return data, fmt.Errorf("invalid psi data: %q", f)
+		}
+		var pv *float64
+		switch kv[0] {
+		case "avg10":
+			pv = &data.Avg10
+		case "avg60":
+			pv = &data.Avg60
+		case "avg300":
+			pv = &data.Avg300
+		case "total":
+			v, err := strconv.ParseUint(kv[1], 10, 64)
+			if err != nil {
+				return data, fmt.Errorf("invalid %s PSI value: %w", kv[0], err)
+			}
+			data.Total = v
+		}
+		if pv != nil {
+			v, err := strconv.ParseFloat(kv[1], 64)
+			if err != nil {
+				return data, fmt.Errorf("invalid %s PSI value: %w", kv[0], err)
+			}
+			*pv = v
+		}
+	}
+	return data, nil
+}
+
 func getSubreaper() (int, error) {
 	var i uintptr
 	if err := unix.Prctl(unix.PR_GET_CHILD_SUBREAPER, uintptr(unsafe.Pointer(&i)), 0, 0, 0); err != nil {
