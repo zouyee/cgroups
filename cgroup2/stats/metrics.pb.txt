@@ -428,8 +428,22 @@ file {
       json_name: "swapLimit"
     }
     field {
-      name: "psi"
+      name: "max_usage"
       number: 36
+      label: LABEL_OPTIONAL
+      type: TYPE_UINT64
+      json_name: "maxUsage"
+    }
+    field {
+      name: "swap_max_usage"
+      number: 37
+      label: LABEL_OPTIONAL
+      type: TYPE_UINT64
+      json_name: "swapMaxUsage"
+    }
+    field {
+      name: "psi"
+      number: 38
       label: LABEL_OPTIONAL
       type: TYPE_MESSAGE
       type_name: ".io.containerd.cgroups.v2.PSIStats"
