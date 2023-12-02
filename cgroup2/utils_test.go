@@ -17,11 +17,17 @@
 package cgroup2
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/containerd/cgroups/v3/cgroup2/stats"
+
+	"github.com/google/go-cmp/cmp"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 func TestParseCgroupFromReader(t *testing.T) {
@@ -38,6 +44,36 @@ func TestParseCgroupFromReader(t *testing.T) {
 		} else {
 			assert.Error(t, err)
 		}
+	}
+}
+
+func TestParseStatCPUPSI(t *testing.T) {
+	const examplePSIData = `some avg10=1.71 avg60=2.36 avg300=2.57 total=230548833
+full avg10=1.00 avg60=1.01 avg300=1.00 total=157622356`
+
+	fakeCgroupDir := t.TempDir()
+	statPath := filepath.Join(fakeCgroupDir, "cpu.pressure")
+
+	if err := os.WriteFile(statPath, []byte(examplePSIData), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	st := getStatPSIFromFile(filepath.Join(fakeCgroupDir, "cpu.pressure"))
+	if diff := cmp.Diff(st, stats.PSIStats{
+		Some: &stats.PSIData{
+			Avg10:  1.71,
+			Avg60:  2.36,
+			Avg300: 2.57,
+			Total:  230548833,
+		},
+		Full: &stats.PSIData{
+			Avg10:  1.00,
+			Avg60:  1.01,
+			Avg300: 1.00,
+			Total:  157622356,
+		},
+	}, protocmp.Transform()); diff != "" {
+		t.Errorf("unexpected PSI result: %+v", diff)
 	}
 }
 
