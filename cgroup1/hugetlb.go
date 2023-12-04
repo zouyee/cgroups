@@ -17,6 +17,7 @@
 package cgroup1
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -55,12 +56,28 @@ func (h *hugetlbController) Create(path string, resources *specs.LinuxResources)
 	if err := os.MkdirAll(h.Path(path), defaultDirPerm); err != nil {
 		return err
 	}
+	skipRsvd := false
 	for _, limit := range resources.HugepageLimits {
+		val := []byte(strconv.FormatUint(limit.Limit, 10))
 		if err := os.WriteFile(
 			filepath.Join(h.Path(path), strings.Join([]string{"hugetlb", limit.Pagesize, "limit_in_bytes"}, ".")),
-			[]byte(strconv.FormatUint(limit.Limit, 10)),
+			val,
 			defaultFilePerm,
 		); err != nil {
+			return err
+		}
+		if skipRsvd {
+			continue
+		}
+		if err := os.WriteFile(
+			filepath.Join(h.Path(path), strings.Join([]string{"hugetlb", limit.Pagesize, "rsvd", "limit_in_bytes"}, ".")),
+			val,
+			defaultFilePerm,
+		); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				skipRsvd = true
+				continue
+			}
 			return err
 		}
 	}
@@ -82,6 +99,7 @@ func (h *hugetlbController) readSizeStat(path, size string) (*v1.HugetlbStat, er
 	s := v1.HugetlbStat{
 		Pagesize: size,
 	}
+	prefix := []string{"hugetlb", size, "rsvd"}
 	for _, t := range []struct {
 		name  string
 		value *uint64
@@ -99,8 +117,13 @@ func (h *hugetlbController) readSizeStat(path, size string) (*v1.HugetlbStat, er
 			value: &s.Failcnt,
 		},
 	} {
-		v, err := readUint(filepath.Join(h.Path(path), strings.Join([]string{"hugetlb", size, t.name}, ".")))
+	again:
+		v, err := readUint(filepath.Join(h.Path(path), strings.Join(append(prefix, t.name), ".")))
 		if err != nil {
+			if len(prefix) == 3 && errors.Is(err, os.ErrNotExist) {
+				prefix = []string{"hugetlb", size}
+				goto again
+			}
 			return nil, err
 		}
 		*t.value = v

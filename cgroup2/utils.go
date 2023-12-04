@@ -392,8 +392,16 @@ func readHugeTlbStats(path string) []*stats.HugeTlbStat {
 	hpSizes := hugePageSizes()
 	usage := make([]*stats.HugeTlbStat, len(hpSizes))
 	for idx, pagesize := range hpSizes {
+		m := getStatFileContentUint64(filepath.Join(path, "hugetlb."+pagesize+".max"))
+		if m < getStatFileContentUint64(filepath.Join(path, "hugetlb."+pagesize+".rsvd"+".max")) {
+			m = getStatFileContentUint64(filepath.Join(path, "hugetlb."+pagesize+".rsvd"+".max"))
+		}
+		c := getStatFileContentUint64(filepath.Join(path, "hugetlb."+pagesize+".current"))
+		if c < getStatFileContentUint64(filepath.Join(path, "hugetlb."+pagesize+".current")) {
+			c = getStatFileContentUint64(filepath.Join(path, "hugetlb."+".rsvd"+".current"))
+		}
 		usage[idx] = &stats.HugeTlbStat{
-			Max:      getStatFileContentUint64(filepath.Join(path, "hugetlb."+pagesize+".max")),
+			Max:      m,
 			Current:  getStatFileContentUint64(filepath.Join(path, "hugetlb."+pagesize+".current")),
 			Pagesize: pagesize,
 		}

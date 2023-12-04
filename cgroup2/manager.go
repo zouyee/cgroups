@@ -120,8 +120,9 @@ func (r *Resources) EnabledControllers() (c []string) {
 
 // Value of a cgroup setting
 type Value struct {
-	filename string
-	value    interface{}
+	filename      string
+	value         interface{}
+	writerHandler func(path, fileName string, perm os.FileMode, data []byte) error
 }
 
 // write the value to the full, absolute path, of a unified hierarchy
@@ -143,7 +144,9 @@ func (c *Value) write(path string, perm os.FileMode) error {
 	default:
 		return ErrInvalidFormat
 	}
-
+	if c.writerHandler != nil {
+		return c.writerHandler(path, c.filename, perm, data)
+	}
 	return os.WriteFile(
 		filepath.Join(path, c.filename),
 		data,
