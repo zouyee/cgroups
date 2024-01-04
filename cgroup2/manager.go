@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
@@ -316,7 +317,7 @@ func (c *Manager) ToggleControllers(controllers []string, t ControllerToggle) er
 		}
 		filePath := filepath.Join(f, subtreeControl)
 		if err := c.writeSubtreeControl(filePath, controllers, t); err != nil {
-			// When running as rootless, the user may face EPERM on parent groups, but it is neglible when the
+			// When running as rootless, the user may face EPERM on parent groups, but it is negligible when the
 			// controller is already written.
 			// So we only return the last error.
 			lastErr = fmt.Errorf("failed to write subtree controllers %+v to %q: %w", controllers, filePath, err)
@@ -478,9 +479,9 @@ func (c *Manager) Delete() error {
 	return remove(c.path)
 }
 
-func (c *Manager) Procs(recursive bool) ([]uint64, error) {
-	var processes []uint64
-	err := filepath.Walk(c.path, func(p string, info os.FileInfo, err error) error {
+func (c *Manager) getTasks(recursive bool, tType string) ([]uint64, error) {
+	var tasks []uint64
+	err := filepath.Walk(c.path, func(p string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -491,17 +492,25 @@ func (c *Manager) Procs(recursive bool) ([]uint64, error) {
 			return filepath.SkipDir
 		}
 		_, name := filepath.Split(p)
-		if name != cgroupProcs {
+		if name != tType {
 			return nil
 		}
-		procs, err := parseCgroupProcsFile(p)
+		curTasks, err := parseCgroupTasksFile(p)
 		if err != nil {
 			return err
 		}
-		processes = append(processes, procs...)
+		tasks = append(tasks, curTasks...)
 		return nil
 	})
-	return processes, err
+	return tasks, err
+}
+
+func (c *Manager) Procs(recursive bool) ([]uint64, error) {
+	return c.getTasks(recursive, cgroupProcs)
+}
+
+func (c *Manager) Threads(recursive bool) ([]uint64, error) {
+	return c.getTasks(recursive, cgroupThreads)
 }
 
 func (c *Manager) MoveTo(destination *Manager) error {
